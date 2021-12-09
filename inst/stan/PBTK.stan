@@ -20,6 +20,7 @@ data {
   int<lower=0> N_rep; // Number of replicate
 
   real tp[N];
+  real tp_eval[N-1];
   matrix[N,N_rep] Cobs_caecum;
   matrix[N,N_rep] Cobs_cephalon;
   matrix[N,N_rep] Cobs_intestin;
@@ -46,13 +47,13 @@ transformed data{
 
   real x_r[1+N_Cw+N_Cw];
 
-  x_int[1] = N_Cw ;
-
   t0 = 0;
   y0[1] = C0_intestin ;
   y0[2] = C0_caecum ;
   y0[3] = C0_cephalon ;
   y0[4] = C0_reste ;
+
+  x_int[1] = N_Cw ;
 
   x_r[1] = tacc ;
   for(i in 1:N_Cw){
@@ -76,14 +77,14 @@ parameters {
 }
 transformed parameters{
 
-  real theta[24] ;
+  real<lower=0> theta[24] ;
 
-  matrix[N,N_rep] Cpred_caecum;
-  matrix[N,N_rep] Cpred_cephalon;
-  matrix[N,N_rep] Cpred_reste;
-  matrix[N,N_rep] Cpred_intestin;
+  vector[N] Cpred_caecum;
+  vector[N] Cpred_cephalon;
+  vector[N] Cpred_reste;
+  vector[N] Cpred_intestin;
 
-  real y_sim[N, 4] ;
+  real<lower=0> y_sim[N-1, 4] ;
 
   for(i in 1:4){
     theta[i] = 10^log10ku[i] ;
@@ -94,18 +95,19 @@ transformed parameters{
     theta[i+20] = 10^log10k4[i] ;
   }
 
-  for(rep in 1:N_rep){
-    y_sim = integrate_ode_rk45(ode_pbtk, y0, t0, tp, theta, x_r, x_int) ;
+  y_sim = integrate_ode_rk45(ode_pbtk, y0, t0, tp_eval, theta, x_r, x_int) ;
 
-    for(t in 1:N){
-        Cpred_intestin[t,rep] = y_sim[t,1] ;
-        Cpred_caecum[t,rep] = y_sim[t,2] ;
-        Cpred_cephalon[t,rep] = y_sim[t,3] ;
-        Cpred_reste[t,rep] = y_sim[t,4] ;
-    }
+  Cpred_intestin[1] = C0_intestin ;
+  Cpred_caecum[1] = C0_caecum ;
+  Cpred_cephalon[1] = C0_cephalon ;
+  Cpred_reste[1] = C0_reste ;
+
+  for(t in 1:N-1){
+      Cpred_intestin[t+1] = y_sim[t,1] ;
+      Cpred_caecum[t+1] = y_sim[t,2] ;
+      Cpred_cephalon[t+1] = y_sim[t,3] ;
+      Cpred_reste[t+1] = y_sim[t,4] ;
   }
-
-
 }
 model {
 
@@ -121,27 +123,25 @@ model {
 
   for(rep in 1:N_rep){
     for(i in 1:N){
-      Cobs_intestin[i,rep] ~ normal(Cpred_intestin[i,rep], sigma[1]);
-      Cobs_caecum[i,rep] ~ normal(Cpred_caecum[i,rep], sigma[2]);
-      Cobs_cephalon[i,rep] ~ normal(Cpred_cephalon[i,rep], sigma[3]);
-      Cobs_reste[i,rep] ~ normal(Cpred_reste[i,rep], sigma[4]);
+      target += normal_lpdf(Cobs_intestin[i,rep] | Cpred_intestin[i], sigma[1]);
+      target += normal_lpdf(Cobs_caecum[i,rep] | Cpred_caecum[i], sigma[2]) ;
+      target += normal_lpdf(Cobs_cephalon[i,rep] | Cpred_cephalon[i], sigma[3]);
+      target += normal_lpdf(Cobs_reste[i,rep] | Cpred_reste[i], sigma[4]);
     }
   }
-
 }
 generated quantities {
 
-  matrix[N,N_rep] Cgen_caecum;
-  matrix[N,N_rep] Cgen_cephalon;
-  matrix[N,N_rep] Cgen_reste;
-  matrix[N,N_rep] Cgen_intestin;
-  for(rep in 1:N_rep){
-    for(t in 1:N){
-      Cgen_intestin[t,rep] = normal_rng(Cpred_intestin[t,rep], sigma[1]) ;
-      Cgen_caecum[t,rep] = normal_rng(Cpred_caecum[t,rep], sigma[2]) ;
-      Cgen_cephalon[t,rep] = normal_rng(Cpred_cephalon[t,rep], sigma[3]) ;
-      Cgen_reste[t,rep] = normal_rng(Cpred_reste[t,rep], sigma[4]) ;
-    }
+  vector[N] Cgen_caecum;
+  vector[N] Cgen_cephalon;
+  vector[N] Cgen_reste;
+  vector[N] Cgen_intestin;
+
+  for(t in 1:N){
+    Cgen_intestin[t] = normal_rng(Cpred_intestin[t], sigma[1]) ;
+    Cgen_caecum[t] = normal_rng(Cpred_caecum[t], sigma[2]) ;
+    Cgen_cephalon[t] = normal_rng(Cpred_cephalon[t], sigma[3]) ;
+    Cgen_reste[t] = normal_rng(Cpred_reste[t], sigma[4]) ;
   }
 }
 

@@ -1,4 +1,4 @@
-#' Posterior predictive check
+#' Bayesian inference of TK model with Stan
 #'
 #' @param stanPBTKdata List of Data require for computing
 #' @param \dots Arguments passed to `rstan::sampling` (e.g. iter, chains).
@@ -15,8 +15,6 @@ fitPBTK <- function(stanPBTKdata, ...){
 }
 
 
-#' Bayesian inference of TK model with Stan
-#'
 #' @rdname fitPBTK
 #'
 #' @export
@@ -31,8 +29,6 @@ fitPBTK.stanPBTKdata <- function(stanPBTKdata, ...) {
   return(out)
 }
 
-#' Bayesian inference of TK model with Stan
-#'
 #' @rdname fitPBTK
 #'
 #' @export
@@ -45,4 +41,42 @@ fitPBTK.stanPBTKoriginaldata <- function(stanPBTKdata, ...) {
   out <- list(stanPBTKdata = stanPBTKdata, stanfit = stanfit)
   class(out) <- append("fitPBTK", class(out))
   return(out)
+}
+
+
+#' Prediction using Stan generated quantity simulator
+#'
+#' @param fitPBTK An object of class \code{fitPBTK}
+#' @param \dots Supplementary arguments
+#'
+#' @return An object of class `predictPBTK`
+#'
+#' @rdname predictPBTK
+#'
+#' @export
+#'
+predictPBTK <- function(fitPBTK, ...){
+  UseMethod("predictPBTK")
+}
+
+
+#' @rdname predictPBTK
+#'
+#' @export
+#'
+predictPBTK.fitPBTK <- function(fitPBTK, ...) {
+
+  # remove additional variables
+  dataFit <- .foo(fitPBTK)
+
+  stanfit <- rstan::sampling(stanmodels$PBTK_predict, data = dataFit, algorithm = "Fixed_param", ...)
+  out <- list(dataFit = dataFit, stanfit = stanfit)
+  class(out) <- append("predictPBTK", class(out))
+  return(out)
+}
+
+######## INTERNAL
+
+.foo <- function(fitPBTK){
+  return(ls= list())
 }
