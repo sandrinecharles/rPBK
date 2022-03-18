@@ -22,61 +22,78 @@ real interpolate(real x, vector xpt, vector ypt){
   }
 }
 
+matrix exact_AD_long(vector time, int N_time, real tacc, matrix E, matrix I, vector U, int N_comp, real Cx){
+  matrix[N_comp,N_comp] E_inv = inverse(E) ;
+  matrix[N_comp,N_time] E_out ;
+  for(i in 1:N_time){
+    if(time[i] < tacc){
+      E_out[1:N_comp,i] = E_inv * (matrix_exp(time[i] * E) - I) * U * Cx ;
+    } else {
+      E_out[1:N_comp,i] = E_inv * (matrix_exp(time[i] * E) - matrix_exp((time[i] - tacc) * E)) * U * Cx ;
+    }
+  }
+  return( E_out' ) ;
+}
+
+matrix matrix_E(vector ke, matrix k, int N_k){
+
+  matrix[N_k, N_k] m = add_diag(k, rep_vector(0,N_k)) ;
+  vector[N_k] diag_k = - ke - m * rep_vector(1,N_k) ;
+  matrix[N_k, N_k] matrix_E = add_diag(k, diag_k) ;
+
+  return(matrix_E) ;
+}
+
+matrix matrix_I(int k){
+  matrix[k,k] I = add_diag(rep_matrix(0, k, k), 1) ;
+  return(I);
+}
+
 real[] ode_pbtk( real t,      // time
                  real[] y,    // variables
                  real[] theta,
                  real[] x_r,
                  int[] x_i) {
 
-  // parameters
-  int N_Cw = x_i[1] ;
+  // recover dimension
+  int N_comp = x_i[1] ;
+  int N_exp = x_i[2] ;
+  int N_obs_exp = x_i[3] ;
 
-  real ku[4] = theta[1:4] ;
-  real ke[4] = theta[5:8] ;
-  real k1[4] = theta[9:12] ;
-  real k2[4] = theta[13:16] ;
-  real k3[4] = theta[17:20] ;
-  real k4[4] = theta[21:24] ;
+  // recover parameters
+  matrix[N_comp, N_comp+2] theta_matrix = to_matrix(theta, N_comp, N_comp+2) ;
+  real ku[N_comp] = to_array_1d(theta_matrix[1:N_comp,1]) ;
+  real ke[N_comp] = to_array_1d(theta_matrix[1:N_comp,2]) ;
+  real k[N_comp, N_comp] = to_array_2d(theta_matrix[1:N_comp, 3:(N_comp+2)]) ;
+
+  // recover exposure profiles
+  matrix[N_obs_exp, 2+N_exp] x_r_matrix = to_matrix(x_r, N_obs_exp, 2+N_exp) ;
+  real tacc = x_r_matrix[1,1] ;
+  vector[N_obs_exp] tp_Cw = to_vector(x_r_matrix[1:N_obs_exp, 2]) ;
+  vector[N_obs_exp] Cw = to_vector(x_r_matrix[1:N_obs_exp, 3]) ;
 
   // vector[1+n_met] dydt ;
-  real dydt[4] ;
+  real dydt[N_comp] ;
 
-  real tacc = x_r[1] ;
-  vector[N_Cw] tp_Cw = to_vector(x_r[2:(N_Cw+1)]) ;
-  vector[N_Cw] Cw = to_vector(x_r[(N_Cw+2):(N_Cw+1+N_Cw)]) ;
-
-  k1[1] = 0;
-  k2[2] = 0;
-  k3[3] = 0;
-  k4[4] = 0;
+  // Diagonals are 0
+  for(i_comp in 1:N_comp){
+    k[i_comp,i_comp] = 0 ;
+  }
 
   if(t <= tacc){
     // Accumulation
-    dydt[1] = ku[1] * interpolate(t, tp_Cw, Cw) - ke[1] * y[1] +
-       k1[1]*y[2] + k2[1]*y[2] + k3[1]*y[3] + k4[1]*y[4] - (k1[1]+k1[2]+k1[3]+k1[4]) * y[1] ;
-
-    dydt[2] = ku[2] * interpolate(t, tp_Cw, Cw) - ke[2] * y[2] +
-       k1[2]*y[2] + k2[2]*y[2] + k3[2]*y[3] + k4[2]*y[4] - (k2[1]+k2[2]+k2[3]+k2[4]) * y[2] ;
-
-    dydt[3] = ku[1] * interpolate(t, tp_Cw, Cw) - ke[3] * y[3] +
-       k1[3]*y[2] + k2[1]*y[2] + k3[1]*y[3] + k4[1]*y[4] - (k3[1]+k3[2]+k3[3]+k3[4]) * y[3] ;
-
-    dydt[4] = ku[1] * interpolate(t, tp_Cw, Cw) - ke[4] * y[4] +
-       k1[4]*y[2] + k2[1]*y[2] + k3[1]*y[3] + k4[1]*y[4] - (k4[1]+k4[2]+k4[3]+k4[4]) * y[4] ;
+    for(i in 1:N_comp){
+       dydt[i] = ku[i] * interpolate(t, tp_Cw, Cw) - ke[i] * y[i] +
+        to_row_vector(k[i,1:N_comp]) * to_vector(y[1:N_comp]) -
+        sum(k[1:N_comp,i]) * y[i] ;
+    }
   } else{
     // Depuration
-    dydt[1] = - ke[1] * y[1] +
-       k1[1]*y[2] + k2[1]*y[2] + k3[1]*y[3] + k4[1]*y[4] - (k1[1]+k1[2]+k1[3]+k1[4]) * y[1] ;
-
-    dydt[2] = - ke[2] * y[2] +
-       k1[2]*y[2] + k2[2]*y[2] + k3[2]*y[3] + k4[2]*y[4] - (k2[1]+k2[2]+k2[3]+k2[4]) * y[2] ;
-
-    dydt[3] = - ke[3] * y[3] +
-       k1[3]*y[2] + k2[1]*y[2] + k3[1]*y[3] + k4[1]*y[4] - (k3[1]+k3[2]+k3[3]+k3[4]) * y[3] ;
-
-    dydt[4] = - ke[4] * y[4] +
-       k1[4]*y[2] + k2[1]*y[2] + k3[1]*y[3] + k4[1]*y[4] - (k4[1]+k4[2]+k4[3]+k4[4]) * y[4] ;
-
+    for(i in 1:N_comp){
+       dydt[i] = - ke[i] * y[i] +
+       to_row_vector(k[i,1:N_comp]) * to_vector(y[1:N_comp]) -
+       sum(k[1:N_comp,i]) * y[i] ;
+    }
   }
   return(dydt) ;
 }

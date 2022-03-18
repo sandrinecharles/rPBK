@@ -20,71 +20,91 @@ modelData <- function(object, ...){
 #'
 #' @export
 #' @importFrom stats na.omit
-modelData.data.frame <- function(object, time_accumulation=7, jitter_t0 = 0.01,...){
+#'
+#'
+modelData.data.frame <- function(
+  object,
+  col_time = NA,
+  col_replicate = NA,
+  col_exposure = NA,
+  col_compartment = NA,
+  time_accumulation = NA,
+  print_messages = FALSE,
+  with_k = 1,
+  ...){
+
+  print_messages <- ifelse(print_messages == FALSE, 0, 1)
 
   data_total <- object
-  #Data sets (all data sets have the same columns names and the same number if lines)
-  data_caecum <- dplyr::filter(data_total, name == "caecum")
-  data_cephalon <- dplyr::filter(data_total, name == "cephalon")
-  data_intestin <- dplyr::filter(data_total, name == "intestin")
-  data_reste <- dplyr::filter(data_total, name == "reste")
 
-  #Creation of objects containing the each type of data
-  #time corresponding to each observation
-  vttot<-data_caecum$temps
-  tp <- unique(vttot)
-  tp[1] <- tp[1]+jitter_t0
+  # recover time objects
+  if(!is.na(col_time)){
+    data_time = data_total[[col_time]]
+  } else{
+    data_time = data_total$time
+  }
+  uniq_time <- sort(unique(data_time))
+  N_time <- length(uniq_time)
 
-  replicate = unique(data_total$replicat)
-  N_rep = length(replicate)
-  # replicate
-  Cobs_caecum <- do.call(
-    "cbind",
-    lapply(1:N_rep, function(i) data_caecum[data_caecum$replicat==i,]$concentration)
-  )
-  Cobs_cephalon <- do.call(
-    "cbind",
-    lapply(1:N_rep, function(i) data_caecum[data_caecum$replicat==i,]$concentration)
-  )
-  Cobs_reste <- do.call(
-    "cbind",
-     lapply(1:N_rep, function(i) data_caecum[data_caecum$replicat==i,]$concentration)
-  )
-  Cobs_intestin <- do.call(
-    "cbind",
-     lapply(1:N_rep, function(i) data_caecum[data_caecum$replicat==i,]$concentration)
-  )
+  # recover replicate objects
+  if(!is.na(col_replicate)){
+    data_replicate = data_total[[col_replicate]]
+  } else{
+    data_replicate = data_total$replicate
+  }
+  uniq_replicate <- unique(data_replicate)
+  N_replicate <- length(uniq_replicate)
 
-  N = nrow(Cobs_caecum)
-  N_Cw = N
+  # recover exposure object
+  N_exposure <- length(col_exposure)
+  ls_exposure <- lapply(1:N_exposure, function(i_exp){
+    r <- do.call(
+      "cbind",
+      lapply(1:N_replicate, function(i) data_total[data_replicate==uniq_replicate[1],col_exposure[i_exp]])
+    )
+  })
+  Cobs_exposure <- array(unlist(ls_exposure), dim=c(N_time, N_exposure))
 
+  # recover compartment object
+  N_compartment <- length(col_compartment)
+  ls_compartment <- lapply(1:N_compartment, function(i_comp){
+    r <- do.call(
+      "cbind",
+      lapply(1:N_replicate, function(i) data_total[data_replicate==uniq_replicate[i],col_compartment[i_comp]])
+    )
+  })
+  Cobs_compartment <- array(unlist(ls_compartment), dim=c(N_time, N_replicate, N_compartment))
   #Value of each organ concentration at t=0 (mean of the 3 values)
-  C0_caecum=mean(data_caecum[1:3,]$concentration)
-  C0_cephalon=mean(data_cephalon[1:3,]$concentration)
-  C0_reste=mean(data_reste[1:3,]$concentration)
-  C0_intestin=mean(data_intestin[1:3,]$concentration)
+  Cobs_compartment_t0 <- sapply(1:N_compartment, function(i) mean(Cobs_compartment[1,1:N_replicate,i]))
+  # to give dimension with a scalare
+  Cobs_compartment_t0 <- array(Cobs_compartment_t0, N_compartment)
 
-  #Contaminant concentration in water
-  Cw_sct=0.01108 #mean concentration in water during the accumulation phase
-  Cw=rep(Cw_sct, N_Cw) # vector of concentration for each time of Temps vector (Cw during the accumultion phase and 0 during the depuration phase)
+  # Creation of objects containing the each type of data
+  # time corresponding to each observation
+  tp <- uniq_time
 
   rtrn_ls <- list(
-    N = N,
-    tp = tp,
-    tp_eval = tp[-1],
-    N_rep = N_rep,
-    C0_caecum=C0_caecum,
-    C0_cephalon=C0_cephalon,
-    C0_intestin=C0_intestin,
-    C0_reste=C0_reste,
-    N_Cw = N_Cw,
-    tp_Cw = tp,
-    Cw=Cw,
-    tacc=time_accumulation,
-    Cobs_caecum=Cobs_caecum,
-    Cobs_cephalon=Cobs_cephalon,
-    Cobs_intestin=Cobs_intestin,
-    Cobs_reste=Cobs_reste)
+    origin_data = object,
+    col_time = col_time,
+    col_replicate = col_replicate,
+    col_exposure = col_exposure,
+    col_compartment = col_compartment,
+    # --------
+    N_obs_comp = N_time,
+    time_obs_comp = tp,
+    time_eval = tp[-1],
+    N_rep = N_replicate,
+    N_exp = N_exposure,
+    N_comp = N_compartment,
+    val_obs_comp = Cobs_compartment,
+    C0_obs_comp = Cobs_compartment_t0,
+    val_obs_exp = Cobs_exposure,
+    N_obs_exp = N_time,
+    time_obs_exp = tp,
+    t0 = 0,
+    tacc = time_accumulation,
+    print_messages = print_messages,
+    with_k = with_k)
 
   class(rtrn_ls) <- append("stanPBTKdata", class(rtrn_ls))
 
@@ -97,53 +117,61 @@ modelData.data.frame <- function(object, time_accumulation=7, jitter_t0 = 0.01,.
 #'
 #' @export
 #' @importFrom stats na.omit
-modelData_original <- function(object, time_accumulation=7, ...){
+modelData_original <- function(
+  object,
+  col_time = NA,
+  col_replicate = NA,
+  col_exposure = NA,
+  col_compartment = NA,
+  time_accumulation = NA, ...){
 
   data_total <- object
-  #Data sets (all data sets have the same columns names and the same number if lines)
-  data_caecum <- dplyr::filter(data_total, name == "caecum")
-  data_cephalon <- dplyr::filter(data_total, name == "cephalon")
-  data_intestin <- dplyr::filter(data_total, name == "intestin")
-  data_reste <- dplyr::filter(data_total, name == "reste")
 
-  #Creation of objects containing the each type of data
-  #time corresponding to each observation
-  vttot<-data_caecum$temps
-  tp <- unique(vttot)
-  tp[1] <- tp[1]
+  # recover time objects
+  if(!is.na(col_time)){
+    data_time = data_total[[col_time]]
+  } else{
+    data_time = data_total$time
+  }
+  uniq_time <- sort(unique(data_time))
+  N_time <- length(uniq_time)
 
-  replicate = unique(data_total$replicat)
-  N_rep = length(replicate)
-  # replicate
-  Cobs_caecum <- do.call(
-    "cbind",
-    lapply(1:N_rep, function(i) data_caecum[data_caecum$replicat==i,]$concentration)
-  )
-  Cobs_cephalon <- do.call(
-    "cbind",
-    lapply(1:N_rep, function(i) data_caecum[data_caecum$replicat==i,]$concentration)
-  )
-  Cobs_reste <- do.call(
-    "cbind",
-    lapply(1:N_rep, function(i) data_caecum[data_caecum$replicat==i,]$concentration)
-  )
-  Cobs_intestin <- do.call(
-    "cbind",
-    lapply(1:N_rep, function(i) data_caecum[data_caecum$replicat==i,]$concentration)
-  )
-  N = nrow(Cobs_caecum)
+  # recover replicate objects
+  if(!is.na(col_replicate)){
+    data_replicate = data_total[[col_replicate]]
+  } else{
+    data_replicate = data_total$replicate
+  }
+  uniq_replicate <- unique(data_replicate)
+  N_replicate <- length(uniq_replicate)
 
+  # recover exposure object
+  N_exposure <- length(col_exposure)
+  ls_exposure <- lapply(1:N_exposure, function(i_exp){
+    r <- do.call(
+      "cbind",
+      lapply(1:N_replicate, function(i) data_total[data_replicate==uniq_replicate[1],col_exposure[i_exp]])
+    )
+  })
+  Cobs_exposure <- array(unlist(ls_exposure), dim=c(N_time, N_exposure))
+
+  # recover compartment object
+  N_compartment <- length(col_compartment)
+  ls_compartment <- lapply(1:N_compartment, function(i_comp){
+    r <- do.call(
+      "cbind",
+      lapply(1:N_replicate, function(i) data_total[data_replicate==uniq_replicate[i],col_compartment[i_comp]])
+    )
+  })
+  Cobs_compartment <- array(unlist(ls_compartment), dim=c(N_time, N_replicate, N_compartment))
   #Value of each organ concentration at t=0 (mean of the 3 values)
-  C0_caecum=mean(data_caecum[1:3,]$concentration)
-  C0_cephalon=mean(data_cephalon[1:3,]$concentration)
-  C0_reste=mean(data_reste[1:3,]$concentration)
-  C0_intestin=mean(data_intestin[1:3,]$concentration)
+  Cobs_compartment_t0 <- sapply(1:N_compartment, function(i) mean(Cobs_compartment[1,1:N_replicate,i]))
 
   # p time step for Euler discretisation of ODE
   p <- 0.5
 
   tacc <- time_accumulation #duration of the accumulation phase
-  td <- max(tp) -  time_accumulation# duration of the depuration phase
+  td <- max(uniq_time) -  time_accumulation# duration of the depuration phase
 
   # vector of time for both accumulation and depuration phases
   tp_Cw <- seq(0,tacc+td,by=p)
@@ -159,24 +187,21 @@ modelData_original <- function(object, time_accumulation=7, ...){
   Cw=c(rep(Cw_cst,posTc),rep(0,(N_Cw-posTc)))
 
   # Position of each time of observation in the vector Temps
-  tp_position <- match(tp,tp_Cw)
+  tp_position <- match(uniq_time,tp_Cw)
 
   rtrn_ls <- list(
-    N = N,
-    N_rep = N_rep,
-    C0_caecum = C0_caecum,
-    C0_cephalon = C0_cephalon,
-    C0_intestin = C0_intestin,
-    C0_reste = C0_reste,
+    N_time = N_time,
+    N_rep = N_replicate,
+    N_comp = N_compartment,
+    C0_comp = Cobs_compartment_t0,
     N_Cw = length(tp_Cw),
     tp_Cw = tp_Cw,
+    Cw = Cw,
     tp_position = tp_position,
+    tp = uniq_time,
+    tacc = time_accumulation,
     p = p,
-    N = length(Cobs_caecum),
-    Cobs_caecum = Cobs_caecum,
-    Cobs_cephalon = Cobs_cephalon,
-    Cobs_intestin = Cobs_intestin,
-    Cobs_reste = Cobs_reste)
+    Cobs_comp = Cobs_compartment)
 
   class(rtrn_ls) <- append("stanPBTKoriginaldata", class(rtrn_ls))
 

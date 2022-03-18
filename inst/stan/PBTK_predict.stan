@@ -4,48 +4,57 @@ functions {
 
 }
 data {
-  int N_predict ;
-  real tp_predict[N_predict] ;
+  // model structure
+  int N_comp; // number of compartiment
+  int N_exp; // number of exposure routes
 
+  // Exposure
+  int<lower=0> N_obs_exp;
+  real time_obs_exp[N_obs_exp];
+  real val_obs_exp[N_obs_exp, N_exp];
+
+  // Compartiment
+  int N_pred_comp ;
+  real time_pred_comp[N_pred_comp] ;
+  real C0_obs_comp[N_comp];
+
+  // Time_accumulation ... TO BE REMOVED !!!
   real tacc;
+  real t0;
 
-  int<lower=0> N_predict_Cw;
-  vector[N_predict_Cw] tp_predict_Cw;
-  vector[N_predict_Cw] Cw_predict;
-
-  real C0_caecum;
-  real C0_cephalon;
-  real C0_reste;
-  real C0_intestin;
-
+  // DATA FOR SAMPLINGS
   int N_samples;
-  real theta[N_samples, 24];
-  matrix[N_samples, 4] sigma;
+  real theta_array [N_samples, 2+N_comp, N_comp];
+  matrix[N_samples, N_comp] sigma;
 }
 transformed data{
 
-  real t0;
-  real y0[4];
+  real y0[N_comp] = C0_obs_comp;
 
-  int<lower=0> x_int[1];
+  int<lower=0> x_int[3];
 
-  real x_r[1+N_predict_Cw+N_predict_Cw];
+  real x_r_array[2+N_exp,N_obs_exp] ;
+  real x_r[(2+N_exp)*N_obs_exp] ;
 
-  t0 = 0;
-  y0[1] = C0_intestin ;
-  y0[2] = C0_caecum ;
-  y0[3] = C0_cephalon ;
-  y0[4] = C0_reste ;
+  real<lower=0> theta_matrix[N_samples, N_comp*(2+N_comp)];
 
-  x_int[1] = N_predict_Cw ;
+  x_int[1] = N_comp ;
+  x_int[2] = N_exp ;
+  x_int[3] = N_obs_exp ;
 
-  x_r[1] = tacc ;
-  for(i in 1:N_predict_Cw){
-    x_r[1+i] = tp_predict_Cw[i] ;
+  for(i in 1:N_obs_exp){
+    x_r_array[1,i] = tacc ;
+    x_r_array[2,i] = time_obs_exp[i] ;
+    for(j in 1:N_exp){
+      x_r_array[2+j,i] = val_obs_exp[i,j] ;
+    }
   }
-  for(i in 1:N_predict_Cw){
-    x_r[i+N_predict_Cw+1] = Cw_predict[i] ;
+  x_r = to_array_1d(x_r_array) ;
+
+  for(i in 1:N_samples){
+    theta_matrix[i,1:N_comp*(2+N_comp)] = to_array_1d(theta_array[i,1:(2+N_comp),1:N_comp]) ;
   }
+
 }
 parameters {
 }
@@ -53,27 +62,22 @@ model {
 }
 generated quantities {
 
-  real<lower=0> y_sim[N_predict, 4] ;
+  matrix[N_obs_exp, 2+N_exp] x_r_matrix = to_matrix(x_r, N_obs_exp, 2+N_exp) ;
+  real tacc_test = x_r_matrix[1,1] ;
+  vector[N_obs_exp] tp_Cw = to_vector(x_r_matrix[1:N_obs_exp, 2]) ;
+  vector[N_obs_exp] Cw = to_vector(x_r_matrix[1:N_obs_exp, 3]) ;
 
-  matrix[N_samples,N_predict] Cgen_caecum;
-  matrix[N_samples,N_predict] Cgen_cephalon;
-  matrix[N_samples,N_predict] Cgen_reste;
-  matrix[N_samples,N_predict] Cgen_intestin;
+  real y_sim[N_pred_comp, N_comp] ;
+  real val_pred_comp[N_samples, N_pred_comp, N_comp];
 
   for(i in 1:N_samples) {
-    y_sim = integrate_ode_rk45(ode_pbtk, y0, t0, tp_predict, theta[i,1:24], x_r, x_int) ;
 
-    // // compartment:
-    // Cpred_intestin[t] = y_sim[t,1] ;
-    // Cpred_caecum[t] = y_sim[t,2] ;
-    // Cpred_cephalon[t] = y_sim[t,3] ;
-    // Cpred_reste[t] = y_sim[t,4] ;
+    y_sim = integrate_ode_rk45(ode_pbtk, y0, t0, time_pred_comp, theta_matrix[i,1:(N_comp*(2+N_comp))], x_r, x_int) ;
 
-    for(t in 1:N_predict){
-      Cgen_intestin[i,t] = normal_rng(y_sim[t,1], sigma[i,1]) ;
-      Cgen_caecum[i,t] = normal_rng(y_sim[t,2], sigma[i,2]) ;
-      Cgen_cephalon[i,t] = normal_rng(y_sim[t,3], sigma[i,3]) ;
-      Cgen_reste[i,t] = normal_rng(y_sim[t,4], sigma[i,4]) ;
+    for(i_comp in 1:N_comp){
+      for(t in 1:N_pred_comp){
+        val_pred_comp[i,t,i_comp] = normal_rng(y_sim[t,i_comp], sigma[i,i_comp]) ;
+      }
     }
   }
 }

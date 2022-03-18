@@ -1,112 +1,102 @@
-//
-// This Stan program defines a simple model, with a
-// vector of values 'y' modeled as normally distributed
-// with mean 'mu' and standard deviation 'sigma'.
-//
 // Learn more about model development with Stan at:
 //
 //    http://mc-stan.org/users/interfaces/rstan.html
 //    https://github.com/stan-dev/rstan/wiki/RStan-Getting-Started
 //
-
-// The input data is a vector 'y' of length 'N'.
 functions {
 
 #include /include/interpolation.stan
 
 }
 data {
-  int<lower=0> N;// number of data per replicate
+  int print_messages;
+  int with_k;
+
+  int<lower=0> N_obs_comp;// number of data per replicate
   int<lower=0> N_rep; // Number of replicate
+  int<lower=0> N_comp; // Number of compartiment
 
-  real tp[N];
-  real tp_eval[N-1];
-  matrix[N,N_rep] Cobs_caecum;
-  matrix[N,N_rep] Cobs_cephalon;
-  matrix[N,N_rep] Cobs_intestin;
-  matrix[N,N_rep] Cobs_reste;
+  real time_obs_comp[N_obs_comp];
+  real time_eval[N_obs_comp-1];
 
-  real C0_caecum;
-  real C0_cephalon;
-  real C0_reste;
-  real C0_intestin;
+  real val_obs_comp[N_obs_comp,N_rep,N_comp];
+  real C0_obs_comp[N_comp];
+
+  real t0;
 
   real tacc;
 
-  int<lower=0> N_Cw;
-  vector[N_Cw] tp_Cw;
-  vector[N_Cw] Cw;
+  int<lower=0> N_obs_exp;
+  int<lower=0> N_exp;
+  vector[N_obs_exp] time_obs_exp;
+  real val_obs_exp[N_obs_exp, N_exp];
 
 }
 transformed data{
 
-  real t0;
-  real y0[4];
+  real y0[N_comp] = C0_obs_comp;
 
-  int<lower=0> x_int[1];
+  int<lower=0> x_int[3];
 
-  real x_r[1+N_Cw+N_Cw];
+  real x_r_array[2+N_exp, N_obs_exp] ;
+  real x_r[(2+N_exp)*N_obs_exp] ;
 
-  t0 = 0;
-  y0[1] = C0_intestin ;
-  y0[2] = C0_caecum ;
-  y0[3] = C0_cephalon ;
-  y0[4] = C0_reste ;
+  x_int[1] = N_comp;
+  x_int[2] = N_exp ;
+  x_int[3] = N_obs_exp ;
 
-  x_int[1] = N_Cw ;
-
-  x_r[1] = tacc ;
-  for(i in 1:N_Cw){
-    x_r[1+i] = tp_Cw[i] ;
+  for(i in 1:N_obs_exp){
+    x_r_array[1,i] = tacc ;
+    x_r_array[2,i] = time_obs_exp[i] ;
+    for(j in 1:N_exp){
+      x_r_array[2+j,i] = val_obs_exp[i,j] ;
+    }
   }
-  for(i in 1:N_Cw){
-    x_r[i+N_Cw+1] = Cw[i] ;
-  }
-
+  x_r = to_array_1d(x_r_array) ;
 }
 parameters {
-  real log10ku[4];
-  real log10ke[4];
+  real log10ku[N_comp];
+  real log10ke[N_comp];
 
-  real log10k1[4];
-  real log10k2[4];
-  real log10k3[4];
-  real log10k4[4];
+  real log10k[N_comp,N_comp];
 
-  real<lower=0> sigma[4];
+  real<lower=0> sigma[N_comp];
 }
 transformed parameters{
 
-  real<lower=0> theta[24] ;
+  real<lower=0> theta[N_comp*(2+N_comp)];
 
-  vector[N] Cpred_caecum;
-  vector[N] Cpred_cephalon;
-  vector[N] Cpred_reste;
-  vector[N] Cpred_intestin;
+  real Cpred_comp[N_obs_comp, N_comp];
+  real y_sim[N_obs_comp-1, N_comp] ;
 
-  real<lower=0> y_sim[N-1, 4] ;
+  matrix[2+N_comp, N_comp] theta_matrix ;
+  for(i in 1:N_comp){
+    theta_matrix[1,i] = 10^log10ku[i] ;
+    theta_matrix[2,i] = 10^log10ke[i] ;
+    for(j in 1:N_comp){
+      if(with_k == 1){
+        theta_matrix[2+j,i] = 10^log10k[i,j] ;
+      } else{
+         theta_matrix[2+j,i] = 0 ;
+      }
+    }
+  }
+  theta = to_array_1d(theta_matrix) ;
 
-  for(i in 1:4){
-    theta[i] = 10^log10ku[i] ;
-    theta[i+4] = 10^log10ke[i] ;
-    theta[i+8] = 10^log10k1[i] ;
-    theta[i+12] = 10^log10k2[i] ;
-    theta[i+16] = 10^log10k3[i] ;
-    theta[i+20] = 10^log10k4[i] ;
+  if(print_messages == 1){
+    print("theta_matrix", theta_matrix);
+    print("theta", theta);
+    print("x_r", x_r);
+    print("x_int", x_int);
   }
 
-  y_sim = integrate_ode_rk45(ode_pbtk, y0, t0, tp_eval, theta, x_r, x_int) ;
+  y_sim = integrate_ode_rk45(ode_pbtk, y0, t0, time_eval, theta, x_r, x_int) ;
 
-  Cpred_intestin[1] = C0_intestin ;
-  Cpred_caecum[1] = C0_caecum ;
-  Cpred_cephalon[1] = C0_cephalon ;
-  Cpred_reste[1] = C0_reste ;
-
-  for(t in 1:N-1){
-      Cpred_intestin[t+1] = y_sim[t,1] ;
-      Cpred_caecum[t+1] = y_sim[t,2] ;
-      Cpred_cephalon[t+1] = y_sim[t,3] ;
-      Cpred_reste[t+1] = y_sim[t,4] ;
+  for(i_comp in 1:N_comp){
+    Cpred_comp[1,i_comp] = C0_obs_comp[i_comp];
+    for(t in 1:N_obs_comp-1){
+      Cpred_comp[t+1,i_comp] = y_sim[t,i_comp] ;
+    }
   }
 }
 model {
@@ -114,34 +104,28 @@ model {
   target += uniform_lpdf(log10ku | -5, 5);
   target += uniform_lpdf(log10ke | -5, 5);
 
-  target += uniform_lpdf(log10k1 | -5, 5);
-  target += uniform_lpdf(log10k2 | -5, 5);
-  target += uniform_lpdf(log10k3 | -5, 5);
-  target += uniform_lpdf(log10k4 | -5, 5);
+  for(i_comp in 1:N_comp){
+    target += uniform_lpdf(log10k[1:N_comp, i_comp] | -5, 5);
+  }
 
-  target += gamma_lpdf(sigma | 0.001,0.001);
+  target += gamma_lpdf(sigma | 0.01,0.01);
 
-  for(rep in 1:N_rep){
-    for(i in 1:N){
-      target += normal_lpdf(Cobs_intestin[i,rep] | Cpred_intestin[i], sigma[1]);
-      target += normal_lpdf(Cobs_caecum[i,rep] | Cpred_caecum[i], sigma[2]) ;
-      target += normal_lpdf(Cobs_cephalon[i,rep] | Cpred_cephalon[i], sigma[3]);
-      target += normal_lpdf(Cobs_reste[i,rep] | Cpred_reste[i], sigma[4]);
+  for(i_rep in 1:N_rep){
+    for(i in 1:N_obs_comp){
+      for(i_comp in 1:N_comp){
+        target += normal_lpdf(val_obs_comp[i,i_rep,i_comp] | Cpred_comp[i,i_comp], sigma[i_comp]);
+      }
     }
   }
 }
 generated quantities {
+  // change Cgen_comp to val_gen_comp
+  real  val_pred_comp[N_obs_comp, N_comp];
 
-  vector[N] Cgen_caecum;
-  vector[N] Cgen_cephalon;
-  vector[N] Cgen_reste;
-  vector[N] Cgen_intestin;
-
-  for(t in 1:N){
-    Cgen_intestin[t] = normal_rng(Cpred_intestin[t], sigma[1]) ;
-    Cgen_caecum[t] = normal_rng(Cpred_caecum[t], sigma[2]) ;
-    Cgen_cephalon[t] = normal_rng(Cpred_cephalon[t], sigma[3]) ;
-    Cgen_reste[t] = normal_rng(Cpred_reste[t], sigma[4]) ;
+  for(i_comp in 1:N_comp){
+    for(t in 1:N_obs_comp){
+      val_pred_comp[t, i_comp] = normal_rng(Cpred_comp[t, i_comp], sigma[i_comp]) ;
+    }
   }
 }
 
