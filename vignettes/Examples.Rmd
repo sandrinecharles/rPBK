@@ -1,0 +1,209 @@
+---
+title: "Examples"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Examples}
+  %\VignetteEncoding{UTF-8}
+  %\VignetteEngine{knitr::rmarkdown}
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+```
+
+We present in this Vignette a set of examples
+
+
+```{r setup}
+library(pbtkDB)
+```
+
+# Single Compartment and Single Exposure : Male Gammarus Single
+
+
+```{r MGS_data}
+data("Male_Gammarus_Single")
+
+# work only when replicate have the same length !!!
+data_MGS <- Male_Gammarus_Single[Male_Gammarus_Single$replicate == 1,]
+```
+
+```{r MGS_prepare}
+modelData_MGS <- modelData(
+  object = data_MGS,
+  col_time = "time",
+  col_replicate = "replicate",
+  col_exposure = "expw",
+  col_compartment = "conc",
+  time_accumulation = 4,
+  nested_model = NA)
+```
+
+```{r MGS_fit}
+fitPBTK_MGS <- fitPBTK(modelData_MGS)
+```
+
+```{r MGS_plot}
+plot(fitPBTK_MGS)
+```
+
+```{r MGS_WAIC}
+library(loo)
+log_lik_MGS <- loo::extract_log_lik(fitPBTK_MGS$stanfit, merge_chains = FALSE)
+WAIC_MGS <- waic(log_lik_MGS)
+```
+
+
+# Multiple Compartiment, Single Exposure - Default interaction
+
+```{r T_data}
+data("data_total")
+
+data_T <- data_total
+```
+
+```{r T_prepare}
+modelData_T <- modelData(
+  object = data_T,
+  col_time = "temps",
+  col_replicate = "replicat",
+  col_exposure = "condition",
+  col_compartment = c("intestin", "reste", "caecum", "cephalon"),
+  time_accumulation = 7)
+```
+
+You can have a look at the assumption on the interaction
+
+```{r T_nested}
+nested_model(modelData_T)
+```
+
+```{r T_fit}
+fitPBTK_T <- fitPBTK(modelData_T, chains = 1, iter = 1000)
+```
+
+```{r T_plot}
+plot(fitPBTK_T)
+```
+
+Compute WAIC with `loo` library:
+
+```{r T_WAIC}
+library(loo)
+log_lik_T <- loo::extract_log_lik(fitPBTK_T$stanfit, merge_chains = FALSE)
+WAIC_T <- waic(log_lik_T)
+print(WAIC_T)
+```
+
+Compute LOO:
+
+```{r T_LOO}
+r_eff_T <- relative_eff(exp(log_lik_T))
+LOO_T <- loo(log_lik_T, r_eff = r_eff_T, cores = 2)
+print(LOO_T)
+```
+
+# Multiple Compartiment, Single Exposure : Change nesting
+
+You can have a look at the assumption on the interaction
+
+```{r T2_nested_T}
+nm_T = nested_model(modelData_T)
+```
+
+We want to change the interaction between organs. For now, all organs interact with each other but not 
+with themselve, the the interaction matrix look like:
+
+```{r T2_k_matrix_T}
+nm_T$k_nest
+```
+
+which can be written like: 
+
+```{r T2_k_matrix_T_}
+matrix(c(
+  c(0,1,1,1),
+  c(1,0,1,1),
+  c(1,1,0,0),
+  c(1,1,1,0)),
+  ncol=4,nrow=4,byrow=TRUE)
+```
+
+Let assume interaction are only one way, so a triangular matrix:
+
+```{r T2_k_matrix_T_h}
+matrix(c(
+  c(0,1,1,1),
+  c(0,0,1,1),
+  c(0,0,0,0),
+  c(0,0,0,0)),
+  ncol=4,nrow=4,byrow=TRUE)
+```
+
+```{r T2_prepare}
+modelData_T2 <- modelData(
+  object = data_T,
+  col_time = "temps",
+  col_replicate = "replicat",
+  col_exposure = "condition",
+  col_compartment = c("intestin", "reste", "caecum", "cephalon"),
+  time_accumulation = 7,
+  ku_nest = c(1,1,1,1), # No Change here
+  ke_nest = c(1,1,1,1), # No Change here
+  k_nest = matrix(c(
+            c(0,1,1,1),
+            c(0,0,1,1),
+            c(0,0,0,0),
+            c(0,0,0,0)),
+            ncol=4,nrow=4,byrow=TRUE) # Remove 
+  )
+
+object = data_T
+col_time = "temps"
+col_replicate = "replicat"
+col_exposure = "condition"
+col_compartment = c("intestin", "reste", "caecum", "cephalon")
+time_accumulation = 7
+ku_nest = c(1,1,1,1) # No Change here
+ke_nest = c(1,1,1,1) # No Change here
+k_nest = matrix(c(
+          c(0,1,1,1),
+          c(0,0,1,1),
+          c(0,0,0,0),
+          c(0,0,0,0)),
+          ncol=4,nrow=4,byrow=TRUE)
+
+```
+
+```{r T2_nested}
+nested_model(modelData_T2)
+```
+
+```{r T2_fit}
+fitPBTK_T2 <- fitPBTK(modelData_T2, chains = 1, iter = 1000)
+```
+
+```{r T2_plot}
+plot(fitPBTK_T2)
+```
+
+```{r T2_WAIC}
+log_lik_T2 <- loo::extract_log_lik(fitPBTK_T2$stanfit, merge_chains = FALSE)
+WAIC_T2 <- waic(log_lik_T2)
+print(WAIC_T2)
+```
+
+Compare WAIC with previous model
+
+```{r T2_compare}
+comp_T_T2 <- loo_compare(WAIC_T, WAIC_T2)
+print(comp_T_T2)
+```
+
+The first column shows the difference in ELPD relative to the model with the largest ELPD. In this case, the difference in elpd and its scale relative to the approximate standard error of the difference) indicates a preference for the second model (model2).
+
