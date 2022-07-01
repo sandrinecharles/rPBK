@@ -1,10 +1,15 @@
 Package: pbtkDB
-Title: What the Package Does (One Line, Title Case)
-Version: 0.0.0.9000
-Authors@R: 
-    person("First", "Last", , "first.last@example.com", role = c("aut", "cre"),
-           comment = c(ORCID = "YOUR-ORCID-ID"))
-Description: What the package does (one paragraph).
+Title: Inference and Prediction of Physiologically-Based Kinetic (rPBK) Models
+Version: 0.2.0
+Authors@R: c(
+    person("Virgile", "Baudrot", role = "aut"),
+    person("Sandrine", "Charles", role = "aut"),
+    person("Christelle", "Lopes", role = "aut"),
+    person("Ophélia", "Gestin", role = "ctb"),
+    person("Dominique", "Lamonica", role = "ctb"),
+    person("Aurélie", "Siberchicot", role = "cre", email = "aurelie.siberchicot@univ-lyon1.fr")
+    )
+Description: Inference and Prediction of Physiologically-Based Pharmaco/Toxico-Kinetic (rPBK) Models.
 License: `use_mit_license()`, `use_gpl3_license()` or friends to pick a
     license
 Encoding: UTF-8
@@ -13,7 +18,7 @@ Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.1.2
 Biarch: true
 Depends: 
-    R (>= 3.4.0)
+    R (>= 4.0.0)
 Imports: 
     methods,
     Rcpp (>= 0.12.0),
@@ -29,5 +34,8 @@ LinkingTo:
     StanHeaders (>= 2.18.0)
 SystemRequirements: GNU make
 Suggests: 
+    knitr,
+    rmarkdown,
     testthat (>= 3.0.0)
 Config/testthat/edition: 3
+VignetteBuilder: knitr

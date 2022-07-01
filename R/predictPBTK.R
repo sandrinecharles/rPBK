@@ -41,9 +41,3 @@ export_interpolate <- function(x, xpt, ypt, chain = 1, iter =1, ...) {
   out <- rstan::extract(stanfit)
   return(out$y)
 }
-
-######## INTERNAL
-
-.foo <- function(fitPBTK){
-  return(ls= list())
-}

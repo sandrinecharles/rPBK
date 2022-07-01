@@ -15,6 +15,10 @@ data {
 
   vector[N_obs_comp] time_obs_comp;
 
+  vector[N_comp] ke_nest;
+  vector[N_comp] ku_nest;
+  matrix[N_comp,N_comp] k_nest;
+
   real val_obs_comp[N_obs_comp,N_rep,N_comp];
 
   real t0;
@@ -36,7 +40,7 @@ transformed parameters{
 
   matrix[N_obs_comp, N_comp] Cpred_comp;
 
-  vector[N_comp] U ;
+  vector[N_comp] ku ;
   vector[N_comp] ke ;
   matrix[N_comp, N_comp] k ;
 
@@ -44,10 +48,10 @@ transformed parameters{
   matrix[N_comp, N_comp] I ;
 
   for(i in 1:N_comp){
-    U[i] = 10^log10ku[i] ;
-    ke[i] = 10^log10ke[i] ;
+    ku[i] = ku_nest[i] == 0 ? 0 :  10^log10ku[i] ;
+    ke[i] = ke_nest[i] == 0 ? 0 :  10^log10ke[i] ;
     for(j in 1:N_comp){
-      k[i,j] = 10^log10k[i,j] ;
+      k[i,j] = k_nest[i,j] == 0 ? 0 :  10^log10k[i,j] ;
     }
   }
 
@@ -60,7 +64,7 @@ transformed parameters{
     tacc, // real tacc,
     E, // matrix E,
     I, // matrix I,
-    U, // vector U,
+    ku, // vector U,
     N_comp, // int N_comp,
     val_obs_exp // real Cx
     ) ;
@@ -87,11 +91,20 @@ model {
 }
 generated quantities {
   // change Cgen_comp to val_gen_comp
-  real  val_pred_comp[N_obs_comp, N_comp];
+  real val_pred_comp[N_obs_comp, N_comp];
+  real log_lik[N_obs_comp, N_rep, N_comp];
 
   for(i_comp in 1:N_comp){
     for(t in 1:N_obs_comp){
       val_pred_comp[t, i_comp] = normal_rng(Cpred_comp[t, i_comp], sigma[i_comp]) ;
+    }
+  }
+  // Log likelihood
+  for(i_rep in 1:N_rep){
+    for(i in 1:N_obs_comp){
+      for(i_comp in 1:N_comp){
+        log_lik[i,i_rep,i_comp] = normal_lpdf(val_obs_comp[i,i_rep,i_comp] | Cpred_comp[i,i_comp], sigma[i_comp]);
+      }
     }
   }
 }

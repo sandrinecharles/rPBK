@@ -15,39 +15,13 @@
 #'
 plot.fitPBTK <- function(x, ...){
 
-  fit <- x
-
-  df <- .df_for_plot(fit)
-
-  # HACK TO BE > 0
-  df$q50 <- ifelse(df$q50<0,0,df$q50)
-  df$qinf95 <- ifelse(df$qinf95<0,0,df$qinf95)
-  df$qsup95 <- ifelse(df$qsup95<0,0,df$qsup95)
-
-  plt <- ggplot(data = df) +
-    theme_classic() +
-    labs(x = "Time", y = "Concentration") +
-    scale_y_continuous(limits = c(0,NA)) +
-    geom_ribbon(
-      aes_string(x = 'time', ymin = 'qinf95', ymax = 'qsup95'),
-      fill = "grey80") +
-    geom_line(
-      aes_string(x = 'time', y = 'q50'),
-      color = "orange") +
-    geom_point(aes_string(x = 'time', y = 'observation' )) +
-    facet_wrap(~variable, scales = "free")
-
-  return(plt)
-}
-
-plot_AD <- function(x, ...){
-
   out_fit <- rstan::extract(x$stanfit)
   out_data <- x$stanPBTKdata
 
   # data.frame for observation
   ls_data <- lapply(1:out_data$N_comp, function(i_comp){
     df = data.frame(observation = c(out_data$val_obs_comp[,,i_comp]))
+    # df$replicate = rep(1:out_data$N_rep, each = out_data$N_obs_comp)
     df$time = rep(out_data$time_obs_comp, out_data$N_rep)
     df$compartment = out_data$col_compartment[i_comp]
     return(df)
@@ -103,62 +77,3 @@ plot_AD <- function(x, ...){
   )
   return(df)
 }
-
-.add_data = function(df_quant95,tp,data,id){
-  if(is.vector(data)){
-    df_quant95$time = tp
-    df_quant95$observation = data
-    df_quant95$replicate = 1
-    df <- df_quant95
-  } else{
-    ls <- lapply(1:ncol(data),
-                 function(i){
-                   df_quant95$time = tp
-                   df_quant95$observation = data[,i]
-                   df_quant95$replicate = i
-                   return(df_quant95)
-                 })
-    df <- do.call("rbind", ls)
-  }
-  df <- df[df$observation != Inf,]
-  df$variable <-  id
-  return(df)
-}
-
-
-
-.df_for_plot <- function(fit){
-  fitMCMC <- rstan::extract(fit$stanfit)
-  data <- fit$stanPBTKdata
-  #
-  ls_out <- list()
-  ls_out$intestin  <- .add_data(
-    df_quant95 = .df_quant95(fitMCMC$Cgen_intestin) ,
-    tp = data$tp,
-    data = data$Cobs_intestin ,
-    id = "intestin "
-  )
-  ls_out$caecum <- .add_data(
-    df_quant95 = .df_quant95(fitMCMC$Cgen_caecum),
-    tp = data$tp,
-    data = data$Cobs_caecum,
-    id = "caecum"
-  )
-  ls_out$cephalon <- .add_data(
-    df_quant95 = .df_quant95(fitMCMC$Cgen_cephalon),
-    tp = data$tp,
-    data = data$Cobs_cephalon,
-    id = "cephalon"
-  )
-  ls_out$reste <- .add_data(
-    df_quant95 = .df_quant95(fitMCMC$Cgen_reste),
-    tp = data$tp,
-    data = data$Cobs_reste,
-    id = "reste"
-  )
-
-  df <- do.call("rbind", ls_out)
-
-  return(df)
-}
-
