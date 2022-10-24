@@ -1,6 +1,14 @@
-# pbtkDB
+# rPBK
 
 An R package for the inference of physiologically-based toxicokinetics model
+
+## Introduction
+
+Fit and simulate any kind of physiologically-based kinetic ('PBK') models whatever the number of compartments. Moreover, it allows to account for any link between pairs of compartments, as well as any link of each of the compartments with the external medium. Such generic PBK models have today applications in pharmacology (PBPK models) to describe drug effects, in toxicology and ecotoxicology (PBTK models) to describe chemical substance effects. In case of exposure to a parent compound (drug or chemical) the 'rPBK' package allows to consider metabolites, whatever their number and their phase (I, II, ...). Last but not least, package 'rPBK' can also be used for dynamic flux balance analysis (dFBA) to deal with metabolic networks.
+
+## Companion paper with details
+
+Charles S, Gestin O, Bruset J, Lamonica D, Baudrot V, Chaumot A, et al. Generic Solving of Physiologically-based Kinetic Models in Sup- port of Next Generation Risk Assessment Due to Chemicals. Journal of Exploratory Research in Pharmacology. 2022, 00(00): 00–00. http://dx.doi.org/10.14218/JERP.2022.00043.
 
 # Development
 
