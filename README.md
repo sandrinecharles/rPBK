@@ -16,7 +16,7 @@ Charles S, Gestin O, Bruset J, Lamonica D, Baudrot V, Chaumot A, et al. Generic 
 
 ```R
 library("rstantools")
-rstan_create_package(path = 'pbtkDB')
+rstan_create_package(path = 'rPBK')
 ```
 
 ## Dev info
@@ -25,7 +25,7 @@ rstan_create_package(path = 'pbtkDB')
 
 Before 'Documentation' and 'Clear and Rebuild' and within 'Configure Build Tools...'
 untick 'use devtools package function if available'.
-Keep 'Generate Configurationwith Roxygen'
+Keep 'Generate Configuration with Roxygen'
 
 ### little hack
 
@@ -33,14 +33,14 @@ Keep 'Generate Configurationwith Roxygen'
 
 ### A lighter package build
 
-To make the package lighter, we have to remove the vignettes: see file `.Rbuildignore`
+To make the package lighter, it is recommended to remove the vignettes: see file `.Rbuildignore`
 
 ### Error to recompile during package dev
 
 Sometimes, there is an Error to recompile during development after change of .stan files.
-A solution is to remove the `rbioacc` folder in R repository of the win-library (see the path written in the error message).
+A solution is to remove the `rPBK` folder in R repository of the win-library (see the path written in the error message).
 
-An other solution is to build the package from the terminal using `R CMD -preclean INSTALL rbioacc` from parent directory of `rbioacc`.
+An other solution is to build the package from the terminal using `R CMD -preclean INSTALL rPBK` from parent directory of `rPBK`.
 
 
 ## Dev tools
